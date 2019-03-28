@@ -86,8 +86,8 @@ public class MergeSortJoinTest {
                                              Stream<R> right,
                                              Function<L, C> keyExtractorLeft,
                                              Function<R, C> keyExtractorRight) {
-            this.left = left.distinct().collect(Collectors.toList());
-            this.right = right.distinct().collect(Collectors.toList());
+            this.left = left.collect(Collectors.toList());
+            this.right = right.collect(Collectors.toList());
             this.keyEextractorLeft = keyExtractorLeft;
             this.keyExtractorRight = keyExtractorRight;
         }
@@ -113,27 +113,24 @@ public class MergeSortJoinTest {
         public Spliterator<Pair<L, R>> trySplit() {
             MergeSortInnerJoinSpliterator res = null;
             if (left.size() > 1) {
-                int splitIndexLeft = left.size() / 2;
-                List<List<L>> halvesLeft = new ArrayList<>(left.stream().
-                    collect(Collectors.partitioningBy(i -> left.indexOf(i) >= splitIndexLeft)
-                    ).values());
-                List<L> firstHalfLeft = halvesLeft.get(0);
-                List<L> secondHalfLeft = halvesLeft.get(1);
-                List<R> firstHalfRight = new ArrayList<>();
-                for (L l : firstHalfLeft) {
-                    firstHalfRight.addAll(right.stream().filter(r ->
-                        keyEextractorLeft.apply(l).equals(keyExtractorRight.apply(r)))
-                        .collect(Collectors.toList()));
-                }
-                List<R> secondHalfRight = new ArrayList<>();
-                for (L l : secondHalfLeft) {
-                    secondHalfRight.addAll(right.stream().filter(r ->
-                        keyEextractorLeft.apply(l).equals(keyExtractorRight.apply(r)))
-                        .collect(Collectors.toList()));
-                }
-                res = new MergeSortInnerJoinSpliterator(firstHalfLeft.stream(),firstHalfRight.stream(),keyEextractorLeft,keyExtractorRight);
-                left = secondHalfLeft;
+              List<List<L>> halvesLeft = new ArrayList<>(left.stream()
+                  .collect(Collectors.partitioningBy(l -> left.indexOf(l) >= left.size() / 2))
+                  .values());
+              List<R> firstHalfRight = halvesLeft.get(0).stream()
+                  .flatMap(l -> right.stream().filter(r ->
+                      keyEextractorLeft.apply(l).equals(keyExtractorRight.apply(r))))
+                  .collect(Collectors.toList());
+              List<R> secondHalfRight = halvesLeft.get(1).stream()
+                  .flatMap(l -> right.stream().filter(r ->
+                      keyEextractorLeft.apply(l).equals(keyExtractorRight.apply(r))))
+                  .collect(Collectors.toList());
+              if (firstHalfRight.size() > 0 && secondHalfRight.size() > 0) {
+                res = new MergeSortInnerJoinSpliterator(halvesLeft.get(0).stream(),
+                    firstHalfRight.stream(),
+                    keyEextractorLeft, keyExtractorRight);
+                left = halvesLeft.get(1);
                 right = secondHalfRight;
+              }
             }
             return res;
         }
